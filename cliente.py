@@ -1,73 +1,73 @@
-import asyncio
 import tkinter as tk
 from tkinter import ttk
+from tkinter import messagebox
+import socket
 import struct
 
-async def reservar_assento_async_helper():
-    origem = origem_entry.get()
-    destino = destino_entry.get()
-    assento = assento_entry.get()
+class PassagensAereasGUI:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Passagens Aéreas")
 
-    request_data = struct.pack('!10s10s1s', origem.encode('utf-8'), destino.encode('utf-8'), assento.encode('utf-8'))
+        self.origem_label = ttk.Label(root, text="Origem:")
+        self.origem_entry = ttk.Entry(root)
 
-    try:
-        reader, writer = await asyncio.open_connection(host, port)
+        self.destino_label = ttk.Label(root, text="Destino:")
+        self.destino_entry = ttk.Entry(root)
 
-        # Envia solicitação
-        writer.write(request_data)
-        await writer.drain()
+        self.assento_label = ttk.Label(root, text="Assento:")
+        self.assento_entry = ttk.Entry(root)
 
-        # Recebe resposta
-        response = await reader.read(1024)
+        self.reservar_button = ttk.Button(root, text="Reservar", command=self.reservar_passagem)
 
-        # Atualiza a interface gráfica
-        root.event_generate("<<UpdateResultLabel>>", when="tail", data=response.decode())
+        self.origem_label.grid(row=0, column=0, padx=10, pady=10, sticky=tk.W)
+        self.origem_entry.grid(row=0, column=1, padx=10, pady=10)
 
-    except Exception as e:
-        # Atualiza a interface gráfica em caso de erro
-        root.event_generate("<<UpdateResultLabel>>", when="tail", data=f"Erro: {e}")
-    finally:
-        writer.close()
-        await writer.wait_closed()
+        self.destino_label.grid(row=1, column=0, padx=10, pady=10, sticky=tk.W)
+        self.destino_entry.grid(row=1, column=1, padx=10, pady=10)
 
-async def reservar_assento_async():
-    loop = asyncio.get_running_loop()
-    await loop.create_task(reservar_assento_async_helper())
+        self.assento_label.grid(row=2, column=0, padx=10, pady=10, sticky=tk.W)
+        self.assento_entry.grid(row=2, column=1, padx=10, pady=10)
 
-# Função para atualizar o rótulo de resultado na interface gráfica
-def update_result_label(event):
-    result_label.config(text=event.data)
+        self.reservar_button.grid(row=3, column=0, columnspan=2, pady=10)
 
-# Configuração da janela
-root = tk.Tk()
-root.title("Reserva de Assento")
+    def reservar_passagem(self):
+        origem = self.origem_entry.get()
+        destino = self.destino_entry.get()
+        assento = self.assento_entry.get()
 
-origem_label = ttk.Label(root, text="Origem:")
-origem_label.grid(row=0, column=0, padx=10, pady=10, sticky="e")
-origem_entry = ttk.Entry(root)
-origem_entry.grid(row=0, column=1, padx=10, pady=10)
+        try:
+            assento = int(assento)
+            if 1 <= assento <= 30:
+                resposta = self.enviar_solicitacao(origem, destino, assento)
+                if "ocupado" in resposta.lower():
+                    messagebox.showerror("Erro", "Assento ocupado. Escolha outro assento.")
+                else:
+                    messagebox.showinfo("Reserva Concluída", resposta)
+            else:
+                messagebox.showerror("Erro", "Assento deve estar entre 1 e 30.")
+        except ValueError:
+            messagebox.showerror("Erro", "Assento deve ser um número inteiro.")
 
-destino_label = ttk.Label(root, text="Destino:")
-destino_label.grid(row=1, column=0, padx=10, pady=10, sticky="e")
-destino_entry = ttk.Entry(root)
-destino_entry.grid(row=1, column=1, padx=10, pady=10)
+    def enviar_solicitacao(self, origem, destino, assento):
+        host = '10.10.128.16'
+        port = 5000
 
-assento_label = ttk.Label(root, text="Assento:")
-assento_label.grid(row=2, column=0, padx=10, pady=10, sticky="e")
-assento_entry = ttk.Entry(root)
-assento_entry.grid(row=2, column=1, padx=10, pady=10)
+        client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            client_socket.connect((host, port))
+        except Exception as e:
+            messagebox.showerror("Erro de Conexão", f"Não foi possível conectar ao servidor: {e}")
+            return
 
-reservar_button = ttk.Button(root, text="Reservar Assento", command=lambda: asyncio.run(reservar_assento_async()))
-reservar_button.grid(row=3, column=0, columnspan=2, pady=20)
+        request_data = struct.pack('!10s10s1s', origem.encode('utf-8'), destino.encode('utf-8'), str(assento).encode('utf-8'))
+        client_socket.send(request_data)
+        response = client_socket.recv(1024).decode()
 
-result_label = ttk.Label(root, text="")
-result_label.grid(row=4, column=0, columnspan=2)
+        client_socket.close()
+        return response
 
-# Associa o evento <<UpdateResultLabel>> à função de atualização
-root.bind("<<UpdateResultLabel>>", update_result_label)
-
-# Configuração do servidor
-host = '192.168.100.94'
-port = 5000
-
-root.mainloop()
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = PassagensAereasGUI(root)
+    root.mainloop()
